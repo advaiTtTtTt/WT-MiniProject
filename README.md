@@ -16,18 +16,19 @@ A Python-based WiFi Channel Analyzer & Optimizer that scans nearby wireless netw
 ## 📋 Prerequisites
 
 - **Linux** (tested on Debian/Ubuntu)
-- **Python 3.8+**
+- **Python 3.10+** (the code uses Python 3.10 type-union syntax)
 - **Root/sudo access** (for WiFi scanning and channel switching)
 - **wireless-tools** or **iw** (for WiFi scanning)
 - **iperf3** (for speed benchmarking — install with `sudo apt install iperf3`)
+- **A reachable iperf3 server**; run `iperf3 -s` on the target host and set `iperf_server` to that host's IP
 - **hostapd** (optional, for channel switching on AP mode)
 
 ## 🚀 Quick Start
 
 ```bash
 # Clone the repository
-git clone https://github.com/<your-username>/wifi-channel-optimizer.git
-cd wifi-channel-optimizer
+git clone https://github.com/advaiTtTtTt/WT-MiniProject.git
+cd WT-MiniProject
 
 # Create virtual environment & install dependencies
 python3 -m venv venv
@@ -98,15 +99,16 @@ wifi-channel-optimizer/
 python3 -m pytest tests/ -v
 ```
 
-## 📈 Sample Output
+## 📈 Generated Output
 
-After running a full analysis, the tool generates:
+Depending on the command and mode, the tool can generate:
 
-- **Channel Occupancy Chart** — Bar chart showing how many APs are on each channel
-- **Signal Strength Distribution** — Box plot of RSSI values per channel
-- **Throughput Comparison** — Before vs. after channel switch
-- **Latency Comparison** — Before vs. after ping times
-- **Overall Score** — Improvement percentage
+- **Channel Congestion Chart** — congestion scores and access-point counts by channel
+- **Signal Heatmap** — a visual representation of the scanned channel/signal distribution
+- **Before/After Comparison Chart** — benchmark metric deltas and an overall improvement summary
+- **JSON data files** — cached scan, analysis, and benchmark results under `data/`
+
+Generated files are local outputs and are excluded from Git by the current `.gitignore`. Values produced with `--demo` are synthetic illustrations, not real Wi-Fi measurements.
 
 ## 🔧 Configuration
 
@@ -125,10 +127,11 @@ Edit `config.json` (auto-generated on first run) to customize:
 
 ## ⚠️ Important Notes
 
-- Scanning requires **root privileges** (`sudo`)
-- Channel switching only works if your device is in **AP mode** (using hostapd) or you have admin access to your router
-- This tool changes YOUR AP's channel — it cannot change other people's channels
-- For best demo results, run in a **crowded environment** (apartment, campus, hostel)
+- Live scanning generally requires **root privileges** (`sudo`) and the Linux `iw` or `iwlist` tools.
+- Throughput benchmarking requires an `iperf3` server listening on the configured target; the default `192.168.1.1` works only if a server is actually running there.
+- Channel switching operates on a supported local AP/monitor interface or a configured `hostapd` software AP. It does not remotely change an ordinary external router's settings.
+- `--demo` uses synthetic scan data and a formula-based benchmark generator. Demo numbers must not be described as real-world performance gains.
+- Validate live scanning, channel switching, and before/after benchmarks on suitable hardware before claiming a measured improvement.
 
 ## 📚 Wireless Concepts Covered
 
@@ -138,7 +141,7 @@ Edit `config.json` (auto-generated on first run) to customize:
 | **Co-channel Interference** | Counts overlapping APs on same channel |
 | **Adjacent Channel Interference** | Calculates overlap scores for nearby channels |
 | **RSSI / Signal Strength** | Measures and compares dBm values |
-| **SNR (Signal-to-Noise)** | Estimates noise floor from scan data |
+| **RSSI-based Signal Quality** | Converts reported signal strength (dBm) to a heuristic quality percentage |
 | **Throughput / Data Rate** | Measures real Mbps with iperf3 |
 | **CSMA/CA** | Explains why more APs = more contention |
 | **Channel Bonding** | Detects 20/40/80 MHz channel widths |
