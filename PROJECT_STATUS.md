@@ -26,9 +26,9 @@
   - `tests/test_analyzer.py`: 19
   - `tests/test_benchmark.py`: 21
   - `tests/test_channel_switcher.py`: 7
-- GitHub Actions completed successfully on Python 3.10 and 3.12 for commit `44d2ef4`: **72 passed in 0.19s**.
-- A full CLI demo smoke-test step (`python main.py --demo`) has been added to the workflow; its latest run must be green before the pull request is ready to merge.
-- The default `main` branch has not been changed by this audit. The changes are on `audit/docs-and-ci` in Pull Request #1.
+- GitHub Actions passed on Python 3.10 and 3.12 for commit `dad5e4d`, with **72 tests passing** in each job.
+- The full CLI demo smoke test (`python main.py --demo`) also passed in both Python versions.
+- The earlier documentation/CI pull request has been merged. The functional hardening changes are on `audit/docs-and-ci` in [Pull Request #2](https://github.com/advaiTtTtTt/WT-MiniProject/pull/2); they are not yet merged into `main`.
 
 ## 3. Important Limitations
 
