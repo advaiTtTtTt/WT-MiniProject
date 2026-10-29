@@ -245,6 +245,10 @@ def run_benchmark(
     ping_data = run_ping_test(server, ping_count)
     if ping_data.get("error"):
         result.errors.append(f"ping: {ping_data['error']}")
+        # A 100% packet-loss result is still a valid loss measurement even
+        # though latency and jitter cannot be calculated without RTT samples.
+        if "packet_loss_percent" in ping_data:
+            result.packet_loss_percent = ping_data["packet_loss_percent"]
     else:
         result.latency_avg_ms = ping_data["latency_avg_ms"]
         result.latency_min_ms = ping_data["latency_min_ms"]
@@ -332,7 +336,10 @@ def print_benchmark_result(result: BenchmarkResult):
     if ping_failed:
         print("  Latency:            N/A (ping test failed)")
         print("  Jitter:             N/A (ping test failed)")
-        print("  Packet Loss:        N/A (ping test failed)")
+        if result.packet_loss_percent >= 100:
+            print(f"  Packet Loss:  {result.packet_loss_percent:>8.2f} % (no RTT replies)")
+        else:
+            print("  Packet Loss:        N/A (ping test failed)")
     else:
         print(f"  Latency:      {result.latency_avg_ms:>8.2f} ms (avg)")
         print(f"               {result.latency_min_ms:>8.2f} — {result.latency_max_ms:.2f} ms (range)")
