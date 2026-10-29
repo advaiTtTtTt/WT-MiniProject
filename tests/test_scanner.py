@@ -99,6 +99,27 @@ BSS aa:bb:cc:44:55:66(on wlan0)
         assert networks[0].ssid == "<Hidden>"
 
 
+    def test_privacy_capability_is_not_reported_as_open(self):
+        output = """BSS aa:bb:cc:11:22:33(on wlan0)
+        freq: 2412
+        signal: -65.00 dBm
+        capability: ESS Privacy
+        """
+        networks = _parse_iw_scan(output)
+        assert len(networks) == 1
+        assert networks[0].security == "Encrypted"
+
+    def test_scan_count_must_be_positive(self, monkeypatch):
+        from src import scanner
+
+        monkeypatch.setattr(
+            scanner, "run_shell_command",
+            lambda *args, **kwargs: pytest.fail("scan should not run for invalid count"),
+        )
+        with pytest.raises(ValueError, match="scan_count"):
+            scanner.scan_networks("wlan0", 0)
+
+
 class TestIwlistScanParser:
     """Tests for iwlist scan output parser."""
 
