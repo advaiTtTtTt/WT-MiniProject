@@ -118,3 +118,54 @@ class TestCompareResults:
 
         comparison = compare_results(before, after)
         assert comparison["overall_improved"] is True
+
+
+class TestLiveBenchmarkFailureHandling:
+    def test_ping_command_missing_is_not_zero_packet_loss(self, monkeypatch):
+        from src import benchmark
+
+        monkeypatch.setattr(
+            benchmark, "run_shell_command",
+            lambda *args, **kwargs: ("", "Command not found: ping", -1),
+        )
+        result = benchmark.run_ping_test("127.0.0.1", count=1)
+        assert "error" in result
+        assert "Command not found" in result["error"]
+        assert "packet_loss_percent" not in result
+
+    def test_ping_parses_real_statistics(self, monkeypatch):
+        from src import benchmark
+
+        output = (
+            "4 packets transmitted, 4 received, 0% packet loss, time 600ms\\n"
+            "rtt min/avg/max/mdev = 1.100/2.200/3.300/0.400 ms"
+        )
+        monkeypatch.setattr(
+            benchmark, "run_shell_command",
+            lambda *args, **kwargs: (output, "", 0),
+        )
+        result = benchmark.run_ping_test("127.0.0.1", count=4)
+        assert result["packet_loss_percent"] == 0
+        assert result["latency_avg_ms"] == 2.2
+        assert result["jitter_ms"] == 0.4
+        assert "error" not in result
+
+    def test_incomplete_live_benchmark_records_errors(self, monkeypatch):
+        from src import benchmark
+
+        monkeypatch.setattr(benchmark, "run_iperf3_test", lambda *args, **kwargs: {})
+        monkeypatch.setattr(
+            benchmark, "run_ping_test",
+            lambda *args, **kwargs: {"error": "ping is unavailable"},
+        )
+        result = benchmark.run_benchmark()
+        assert result.source == "live"
+        assert any(error.startswith("iperf3:") for error in result.errors)
+        assert any(error.startswith("ping:") for error in result.errors)
+
+    def test_demo_results_are_labelled_synthetic(self):
+        from src.benchmark import generate_demo_benchmark
+
+        result = generate_demo_benchmark("before", 6)
+        assert result.source == "synthetic"
+        assert result.errors == []
