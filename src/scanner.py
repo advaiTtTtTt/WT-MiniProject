@@ -103,7 +103,9 @@ def _parse_iw_scan(output: str) -> list[NetworkInfo]:
             current.security = "WPA2/WPA3"
         elif "WEP" in line:
             current.security = "WEP"
-        elif "Privacy" in line.lower():
+        elif "privacy" in line.lower():
+            # The capability flag is reported as "Privacy" by iw. Compare
+            # case-insensitively so encrypted networks are not presented as open.
             if current.security == "Open":
                 current.security = "Encrypted"
 
@@ -201,6 +203,11 @@ def scan_networks(interface: str = "wlan0", scan_count: int = 3) -> list[Network
     Returns:
         List of NetworkInfo objects for all discovered networks
     """
+    if not isinstance(interface, str) or not interface.strip():
+        raise ValueError("interface must be a non-empty interface name")
+    if isinstance(scan_count, bool) or not isinstance(scan_count, int) or scan_count < 1:
+        raise ValueError("scan_count must be a positive integer")
+
     all_networks: dict[str, NetworkInfo] = {}
 
     for i in range(scan_count):

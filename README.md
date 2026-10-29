@@ -52,6 +52,7 @@ wifi-channel-optimizer/
 ├── main.py                  # Main CLI entry point
 ├── requirements.txt         # Python dependencies
 ├── README.md
+├── LICENSE                  # MIT license
 ├── src/
 │   ├── __init__.py
 │   ├── scanner.py           # WiFi network scanner (iw/iwlist)
@@ -68,7 +69,8 @@ wifi-channel-optimizer/
     ├── __init__.py
     ├── test_scanner.py
     ├── test_analyzer.py
-    └── test_benchmark.py
+    ├── test_benchmark.py
+    └── test_channel_switcher.py
 ```
 
 ## 📊 How It Works

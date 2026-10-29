@@ -149,8 +149,9 @@ def cmd_full_workflow(config: dict, demo: bool = False):
         current_channel = get_current_channel(config["interface"])
 
     if current_channel is None:
-        print("  [!] Could not determine current channel.")
-        current_channel = 6  # Default assumption
+        print("  [!] Could not determine the current channel; refusing to assume channel 6.")
+        print("      Check the interface name and ensure it is an active AP/monitor interface.")
+        return
 
     target_channel = best.channel
 
@@ -193,6 +194,9 @@ def cmd_full_workflow(config: dict, demo: bool = False):
 
     print_benchmark_result(before_result)
     save_json(before_result.to_dict(), "benchmark_before.json")
+    if before_result.errors:
+        print("  [!] Baseline benchmark incomplete; channel switch aborted to avoid a misleading comparison.")
+        return
 
     # Step 4: Switch Channel
     print("\n" + "=" * 60)
@@ -230,6 +234,9 @@ def cmd_full_workflow(config: dict, demo: bool = False):
 
     print_benchmark_result(after_result)
     save_json(after_result.to_dict(), "benchmark_after.json")
+    if after_result.errors:
+        print("  [!] After-switch benchmark incomplete; comparison aborted.")
+        return
 
     # Step 6: Compare
     print("\n" + "=" * 60)
@@ -355,7 +362,11 @@ def main():
             print("[!] No benchmark data found. Run full workflow first.")
             return
 
-        comparison = compare_results(before, after)
+        try:
+            comparison = compare_results(before, after)
+        except ValueError as exc:
+            print(f"[!] Cannot compare benchmark results: {exc}")
+            return
         print_comparison(comparison)
         chart_path = generate_comparison_chart(before, after)
         if chart_path:
