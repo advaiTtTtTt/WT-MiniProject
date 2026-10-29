@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+venv/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Project generated files
+reports/*.png
+reports/*.pdf
+data/*.json
+data/*.csv
+!data/.gitkeep
+!reports/.gitkeep
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Config with secrets
+config.json
