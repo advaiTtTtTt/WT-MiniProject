@@ -82,3 +82,22 @@ def test_hostapd_switch_rolls_back_config_when_restart_fails(tmp_path, monkeypat
     assert config.read_text(encoding="utf-8") == original
     assert "original config restored" in message
     assert len(calls) == 4  # systemctl + service, then rollback restarts
+
+
+def test_hostapd_switch_updates_band_mode_for_five_ghz(tmp_path, monkeypatch):
+    config = tmp_path / "hostapd.conf"
+    config.write_text(
+        "interface=wlan0\nhw_mode=g\nchannel=6\nssid=TestNet\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        switcher, "run_shell_command", lambda *args, **kwargs: ("", "", 0)
+    )
+    monkeypatch.setattr(switcher.time, "sleep", lambda seconds: None)
+
+    success, message = switcher.switch_channel_hostapd(36, str(config))
+    updated = config.read_text(encoding="utf-8")
+    assert success is True
+    assert "hw_mode=a\n" in updated
+    assert "channel=36\n" in updated
+    assert "hw_mode=g\n" not in updated
