@@ -169,3 +169,26 @@ class TestLiveBenchmarkFailureHandling:
         result = generate_demo_benchmark("before", 6)
         assert result.source == "synthetic"
         assert result.errors == []
+
+
+class TestComparatorValidation:
+    def test_zero_baseline_percentage_is_json_safe(self):
+        import json
+
+        before = BenchmarkResult(throughput_mbps=0.0)
+        after = BenchmarkResult(throughput_mbps=10.0)
+        comparison = compare_results(before, after)
+        assert comparison["throughput_mbps"]["percent_change"] is None
+        json.dumps(comparison, allow_nan=False)
+
+    def test_comparison_rejects_incomplete_live_benchmark(self):
+        before = BenchmarkResult(errors=["iperf3: unavailable"])
+        after = BenchmarkResult()
+        with pytest.raises(ValueError, match="incomplete benchmark"):
+            compare_results(before, after)
+
+    def test_comparison_rejects_mixed_data_sources(self):
+        before = BenchmarkResult(source="synthetic")
+        after = BenchmarkResult(source="live")
+        with pytest.raises(ValueError, match="different data sources"):
+            compare_results(before, after)
