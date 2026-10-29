@@ -68,7 +68,8 @@ wifi-channel-optimizer/
     ├── __init__.py
     ├── test_scanner.py
     ├── test_analyzer.py
-    └── test_benchmark.py
+    ├── test_benchmark.py
+    └── test_channel_switcher.py
 ```
 
 ## 📊 How It Works
