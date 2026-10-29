@@ -126,22 +126,31 @@ def switch_channel_hostapd(channel: int, config_path: str = "/etc/hostapd/hostap
     except OSError as exc:
         return False, f"Could not read {config_path}: {exc}"
 
-    # Replace one active channel directive and remove duplicates. Preserve
-    # comments and every other hostapd setting.
+    # hostapd uses hw_mode=g for 2.4 GHz and hw_mode=a for 5 GHz.
+    # Update both settings together; changing only channel= breaks band changes.
+    desired = {
+        "channel": str(channel),
+        "hw_mode": "g" if is_24ghz(channel) else "a",
+    }
     new_lines = []
-    channel_written = False
+    written = {key: False for key in desired}
+    directive = re.compile(r"^\s*(channel|hw_mode)\s*=", re.IGNORECASE)
     for line in original_text.splitlines(keepends=True):
-        if re.match(r"^\s*channel\s*=", line) and not channel_written:
-            new_lines.append(f"channel={channel}\n")
-            channel_written = True
-        elif re.match(r"^\s*channel\s*=", line):
+        match = directive.match(line)
+        if match:
+            key = match.group(1).lower()
+            if key in desired and not written[key]:
+                new_lines.append(f"{key}={desired[key]}\n")
+                written[key] = True
+            # Drop duplicate active directives. Leave comments untouched.
             continue
-        else:
-            new_lines.append(line)
-    if not channel_written:
-        if new_lines and not new_lines[-1].endswith(("\n", "\r")):
-            new_lines[-1] += "\n"
-        new_lines.append(f"channel={channel}\n")
+        new_lines.append(line)
+
+    for key, value in desired.items():
+        if not written[key]:
+            if new_lines and not new_lines[-1].endswith(("\n", "\r")):
+                new_lines[-1] += "\n"
+            new_lines.append(f"{key}={value}\n")
     updated_text = "".join(new_lines)
 
     try:
