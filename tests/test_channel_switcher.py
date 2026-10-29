@@ -21,7 +21,7 @@ def test_auto_switch_refuses_managed_interface_without_touching_hostapd(monkeypa
     )
     success, message = switcher.switch_channel("wlan0", 11)
     assert success is False
-    assert "cannot change the channel" in message
+    assert "cannot change the upstream router's channel" in message
 
 
 def test_auto_switch_rejects_unknown_interface_mode(monkeypatch):
