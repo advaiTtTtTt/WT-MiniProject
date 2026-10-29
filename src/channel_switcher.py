@@ -6,8 +6,10 @@ Supports both direct channel switching (for devices in AP mode) and
 hostapd configuration updates.
 """
 
+import os
 import re
 import time
+from pathlib import Path
 
 from .utils import (
     run_shell_command,
@@ -19,6 +21,33 @@ from .utils import (
     get_band,
 )
 
+
+
+def _get_interface_type(interface: str) -> str | None:
+    """Return interface mode reported by iw (managed, AP, monitor, etc.)."""
+    stdout, _, rc = run_shell_command(["iw", "dev", interface, "info"])
+    if rc != 0:
+        return None
+    match = re.search(r"^\s*type\s+(\S+)", stdout, re.IGNORECASE | re.MULTILINE)
+    return match.group(1).lower() if match else None
+
+
+def _atomic_write(path: Path, content: str) -> None:
+    """Atomically replace a config file while preserving its permission bits."""
+    temp_path = path.with_name(f".{path.name}.tmp")
+    try:
+        mode = path.stat().st_mode & 0o777
+        with open(temp_path, "w", encoding="utf-8") as stream:
+            stream.write(content)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.chmod(temp_path, mode)
+        os.replace(temp_path, path)
+    finally:
+        try:
+            temp_path.unlink(missing_ok=True)
+        except OSError:
+            pass
 
 def get_current_channel(interface: str = "wlan0") -> int | None:
     """
@@ -51,104 +80,111 @@ def get_current_channel(interface: str = "wlan0") -> int | None:
 
 
 def switch_channel_iw(interface: str, channel: int) -> tuple[bool, str]:
-    """
-    Switch WiFi channel using the 'iw' command.
-
-    This works when the device is in AP/Monitor mode.
-
-    Args:
-        interface: WiFi interface name
-        channel: Target channel number
-
-    Returns:
-        (success: bool, message: str)
-    """
+    """Switch a compatible AP/monitor interface using iw."""
     freq = channel_to_freq(channel)
     if freq is None:
         return False, f"Invalid channel number: {channel}"
+    if not isinstance(interface, str) or not interface.strip():
+        return False, "A non-empty Wi-Fi interface name is required."
+
+    interface_type = _get_interface_type(interface)
+    if interface_type not in {"ap", "monitor"}:
+        mode = interface_type or "unknown"
+        return False, (
+            f"Refusing direct channel switch on {interface!r}: interface mode is {mode!r}. "
+            "Direct iw switching is limited to AP or monitor interfaces; it cannot "
+            "change the channel of an upstream home router."
+        )
 
     print(f"  [*] Switching {interface} to channel {channel} ({freq} MHz)...")
-
-    # Method 1: Direct channel set via iw
     stdout, stderr, rc = run_shell_command(
         ["iw", "dev", interface, "set", "channel", str(channel)]
     )
     if rc == 0:
         return True, f"Successfully switched to channel {channel}"
 
-    # Method 2: Set via frequency
     stdout, stderr, rc = run_shell_command(
         ["iw", "dev", interface, "set", "freq", str(freq)]
     )
     if rc == 0:
         return True, f"Successfully switched to channel {channel} ({freq} MHz)"
 
-    return False, f"Failed to switch channel: {stderr.strip()}"
-
+    return False, f"Failed to switch channel: {stderr.strip() or stdout.strip() or 'iw command failed'}"
 
 def switch_channel_hostapd(channel: int, config_path: str = "/etc/hostapd/hostapd.conf") -> tuple[bool, str]:
-    """
-    Switch WiFi channel by modifying hostapd configuration and restarting.
+    """Update a hostapd config and restart the service, rolling back on failure."""
+    if channel_to_freq(channel) is None:
+        return False, f"Invalid channel number: {channel}"
 
-    This is the recommended method when running as a software access point.
-
-    Args:
-        channel: Target channel number
-        config_path: Path to hostapd.conf
-
-    Returns:
-        (success: bool, message: str)
-    """
+    config_file = Path(config_path)
     try:
-        with open(config_path) as f:
-            config_lines = f.readlines()
+        original_text = config_file.read_text(encoding="utf-8")
     except FileNotFoundError:
         return False, f"hostapd config not found at {config_path}"
     except PermissionError:
         return False, f"Permission denied reading {config_path}"
+    except OSError as exc:
+        return False, f"Could not read {config_path}: {exc}"
 
-    # Update the channel line
+    # Replace one active channel directive and remove duplicates. Preserve
+    # comments and every other hostapd setting.
     new_lines = []
-    channel_found = False
-    for line in config_lines:
-        if line.strip().startswith("channel="):
+    channel_written = False
+    for line in original_text.splitlines(keepends=True):
+        if re.match(r"^\s*channel\s*=", line) and not channel_written:
             new_lines.append(f"channel={channel}\n")
-            channel_found = True
+            channel_written = True
+        elif re.match(r"^\s*channel\s*=", line):
+            continue
         else:
             new_lines.append(line)
-
-    if not channel_found:
+    if not channel_written:
+        if new_lines and not new_lines[-1].endswith(("\n", "\r")):
+            new_lines[-1] += "\n"
         new_lines.append(f"channel={channel}\n")
+    updated_text = "".join(new_lines)
 
-    # Write updated config
     try:
-        with open(config_path, "w") as f:
-            f.writelines(new_lines)
-    except PermissionError:
-        return False, f"Permission denied writing to {config_path}"
+        _atomic_write(config_file, updated_text)
+    except OSError as exc:
+        return False, f"Could not update {config_path}: {exc}"
 
     print(f"  [*] Updated {config_path} with channel={channel}")
-
-    # Restart hostapd
     print("  [*] Restarting hostapd...")
-    stdout, stderr, rc = run_shell_command(
+    _, stderr, rc = run_shell_command(
         ["systemctl", "restart", "hostapd"], timeout=10
     )
-
-    if rc == 0:
-        time.sleep(2)  # Wait for AP to come back up
-        return True, f"Successfully switched hostapd to channel {channel}"
-
-    # Try direct restart
-    stdout, stderr, rc = run_shell_command(
-        ["service", "hostapd", "restart"], timeout=10
-    )
+    if rc != 0:
+        _, stderr, rc = run_shell_command(
+            ["service", "hostapd", "restart"], timeout=10
+        )
     if rc == 0:
         time.sleep(2)
         return True, f"Successfully switched hostapd to channel {channel}"
 
-    return False, f"Failed to restart hostapd: {stderr.strip()}"
+    restart_error = stderr.strip() or "restart command failed"
+    try:
+        _atomic_write(config_file, original_text)
+    except OSError as exc:
+        return False, (
+            f"Failed to restart hostapd ({restart_error}) and failed to restore "
+            f"the original configuration ({exc}). Inspect {config_path} immediately."
+        )
 
+    # Best-effort restart with the original configuration.
+    _, _, rollback_rc = run_shell_command(
+        ["systemctl", "restart", "hostapd"], timeout=10
+    )
+    if rollback_rc != 0:
+        _, _, rollback_rc = run_shell_command(
+            ["service", "hostapd", "restart"], timeout=10
+        )
+    if rollback_rc == 0:
+        return False, f"Failed to switch channel ({restart_error}); original config restored."
+    return False, (
+        f"Failed to switch channel ({restart_error}); original config restored, "
+        "but restarting hostapd with the original config also failed. Check service status."
+    )
 
 def switch_channel(
     interface: str = "wlan0",
@@ -182,18 +218,33 @@ def switch_channel(
         if current == channel:
             return True, f"Already on channel {channel}"
 
+    if method not in {"auto", "iw", "hostapd"}:
+        return False, f"Invalid switching method: {method!r}. Use 'auto', 'iw', or 'hostapd'."
+
     if method == "hostapd":
         return switch_channel_hostapd(channel)
-    elif method == "iw":
+    if method == "iw":
         return switch_channel_iw(interface, channel)
-    else:
-        # Auto: try iw first, then hostapd
-        success, msg = switch_channel_iw(interface, channel)
-        if success:
-            return success, msg
 
-        print("  [*] iw method failed, trying hostapd...")
+    # Auto mode must not treat a normal Wi-Fi client interface as an AP. A
+    # failed attempt on wlan0 must not restart an unrelated hostapd service.
+    interface_type = _get_interface_type(interface)
+    if interface_type not in {"ap", "monitor"}:
+        mode = interface_type or "unknown"
+        return False, (
+            f"Refusing automatic channel switch: {interface!r} is in {mode!r} mode. "
+            "A managed/client interface cannot change the upstream router's channel. "
+            "Use a local AP/monitor interface, or explicitly select method='hostapd' "
+            "for a hostapd access point you administer."
+        )
+
+    success, msg = switch_channel_iw(interface, channel)
+    if success:
+        return success, msg
+    if interface_type == "ap":
+        print("  [*] Direct iw method failed on an AP interface; trying hostapd...")
         return switch_channel_hostapd(channel)
+    return False, msg
 
 
 def simulate_switch(current_channel: int, target_channel: int) -> dict:
