@@ -99,6 +99,7 @@ BSS aa:bb:cc:44:55:66(on wlan0)
         assert networks[0].ssid == "<Hidden>"
 
 
+class TestScannerInputValidation:
     def test_privacy_capability_is_not_reported_as_open(self):
         output = """BSS aa:bb:cc:11:22:33(on wlan0)
         freq: 2412
