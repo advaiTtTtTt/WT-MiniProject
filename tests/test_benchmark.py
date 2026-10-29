@@ -137,7 +137,7 @@ class TestLiveBenchmarkFailureHandling:
         from src import benchmark
 
         output = (
-            "4 packets transmitted, 4 received, 0% packet loss, time 600ms\\n"
+            "4 packets transmitted, 4 received, 0% packet loss, time 600ms\n"
             "rtt min/avg/max/mdev = 1.100/2.200/3.300/0.400 ms"
         )
         monkeypatch.setattr(
